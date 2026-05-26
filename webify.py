@@ -15,7 +15,7 @@ GAME_GLOBALS: dict[str, str] = {
     "hangman": "running, word, guessed, wrong_guesses, game_over, win, letters",
     "reaction": "running, state, round_number, wait_time, game_start, start_time, reaction_times",
     "tictactoe": "running, player, board, game_over, vs_bot",
-    "rps": "running",
+    "rps": "running, player_choice, computer_choice, result_text, rounds_left, player_score, computer_score, game_over",
     "pacman": "running, player_x, player_y, ghosts, dots, score",
 }
 
@@ -33,12 +33,8 @@ def _add_asyncio(code: str) -> str:
     return "".join(lines)
 
 
-def _sleep_after_ticks(code: str) -> str:
-    """await nur im Körper von async def (nicht in normalen def-Hilfsfunktionen)."""
-
-    def repl(m: re.Match) -> str:
-        ind, stmt = m.group(1), m.group(2)
-        return f"{ind}{stmt}\n{ind}await asyncio.sleep(0)"
+def _yield_in_async_body(code: str) -> str:
+    """await asyncio.sleep(0) nach tick/display nur in async def (nicht in sync helpers)."""
 
     lines = code.splitlines(keepends=True)
     out: list[str] = []
@@ -52,31 +48,45 @@ def _sleep_after_ticks(code: str) -> str:
             if not line.startswith("asyncio.run"):
                 in_async = False
         out.append(line)
-        if in_async and re.match(r"^(\s*)clock\.tick\([^)]*\)\s*$", line):
-            ind = re.match(r"^(\s*)", line).group(1)
-            out.append(f"{ind}await asyncio.sleep(0)\n")
+        if not in_async:
+            continue
+        m = re.match(r"^(\s*)clock\.tick\([^)]*\)\s*$", line)
+        if m:
+            out.append(f"{m.group(1)}await asyncio.sleep(0)\n")
+            continue
+        m = re.search(r"^(\s*)pygame\.display\.(?:update|flip)\(\)\s*$", line)
+        if m:
+            out.append(f"{m.group(1)}await asyncio.sleep(0)\n")
     return "".join(out)
 
 
-def _sleep_after_display(code: str) -> str:
-    """pygame.display.update nur in async def — vermeidet SyntaxError in draw_lost_message etc."""
+def _yield_in_loop_body(tail: str) -> str:
+    """Für while-Schleifen, die später in async def main() landen — pygbag braucht jeden Frame ein yield."""
 
-    lines = code.splitlines(keepends=True)
-    out: list[str] = []
-    in_async = False
-    for line in lines:
-        if re.match(r"^async def ", line):
-            in_async = True
-        elif in_async and re.match(r"^def ", line):
-            in_async = False
-        elif in_async and line.strip() and not line[0].isspace():
-            if not line.startswith("asyncio.run"):
-                in_async = False
-        out.append(line)
-        if in_async and re.search(r"pygame\.display\.(?:update|flip)\(\)", line):
-            ind = re.match(r"^(\s*)", line).group(1)
-            out.append(f"{ind}await asyncio.sleep(0)\n")
-    return "".join(out)
+    def after_tick(m: re.Match) -> str:
+        ind = m.group(1)
+        return f"{ind}{m.group(2)}\n{ind}await asyncio.sleep(0)"
+
+    def after_display(m: re.Match) -> str:
+        ind = m.group(1)
+        return f"{ind}{m.group(2)}\n{ind}await asyncio.sleep(0)"
+
+    tail = re.sub(r"^(\s*)(clock\.tick\([^)]*\))", after_tick, tail, flags=re.M)
+    tail = re.sub(
+        r"^(\s*)(pygame\.display\.(?:update|flip)\(\))",
+        after_display,
+        tail,
+        flags=re.M,
+    )
+    if "await asyncio.sleep(0)" not in tail:
+        tail = re.sub(
+            r"(^while\s+.+:\s*\n)",
+            r"\1        await asyncio.sleep(0)\n",
+            tail,
+            count=1,
+            flags=re.M,
+        )
+    return tail
 
 
 def _strip_tail(code: str) -> str:
@@ -103,8 +113,7 @@ def _wrap_module_while(code: str, game_id: str) -> str:
         return code
     head, tail = code[: m.start()], code[m.start() :]
     tail = _strip_tail(tail)
-    tail = _sleep_after_ticks(tail)
-    tail = _sleep_after_display(tail)
+    tail = _yield_in_loop_body(tail)
     tail = re.sub(
         r"pygame\.time\.delay\((\d+)\)",
         r"await asyncio.sleep(\1 / 1000)",
@@ -186,15 +195,14 @@ def webify(code: str, game_id: str) -> str:
 
     if game_id == "snake":
         code = code.replace("def start_game():", "async def main():")
-        code = _sleep_after_ticks(code)
+        code = _yield_in_async_body(code)
         if "asyncio.run(main())" not in code:
             code += "\nasyncio.run(main())\n"
         return code
 
     if game_id == "tetris":
         code = code.replace("def main():", "async def main():")
-        code = _sleep_after_ticks(code)
-        code = _sleep_after_display(code)
+        code = _yield_in_async_body(code)
         code = _fix_tetris_draw_lost(code)
         if "asyncio.run(main())" not in code:
             code += "\nasyncio.run(main())\n"

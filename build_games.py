@@ -45,9 +45,30 @@ def patch_index(html_path: Path) -> None:
         "if platform.window.location.host.find('.itch.zone')>0:",
         "if True:  # .apk für GitHub Pages",
     )
+    text = text.replace(
+        "if not platform.window.MM.UME:",
+        "if False:  # patched: auto-start",
+        1,
+    )
+    for old, new in (
+        ("ume_block : 1,", "ume_block : 0,"),
+        ("ume_block: 1,", "ume_block: 0,"),
+        ("autorun : 0,", "autorun : 1,"),
+        ("autorun: 0,", "autorun: 1,"),
+        ("gui_divider : 2,", "gui_divider : 1,"),
+        ("gui_divider: 2,", "gui_divider: 1,"),
+    ):
+        text = text.replace(old, new)
     if "pu-bar" not in text:
         text = text.replace("<body", BACK_BAR + "<body", 1)
     html_path.write_text(text, encoding="utf-8")
+
+
+def patch_all_play() -> None:
+    """index.html in play/ patchen ohne kompletten Neu-Build."""
+    for html in PLAY.glob("*/index.html"):
+        patch_index(html)
+        print(f"  patched {html.parent.name}")
 
 
 def build_one(game_id: str, source_name: str) -> bool:
@@ -122,4 +143,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--patch-only":
+        patch_all_play()
+    else:
+        main()
