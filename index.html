@@ -4,53 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PU Python Games</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
   <div class="blob blob-1"></div>
   <div class="blob blob-2"></div>
   <div class="blob blob-3"></div>
-
   <div class="wrap">
     <header>
-      <span class="badge">PU Projekt · Python</span>
+      <span class="badge">PU Projekt · Python Games</span>
       <h1>Deine Python Games 🐍</h1>
-      <p class="sub">Echte <strong>Python</strong>-Spiele im Browser — dieselben .py-Dateien, kompiliert mit Pygbag. Kein VS Code, kein localhost.</p>
-      <p class="note">1. Spiel wählen · 2. ca. 15–30 Sek. laden lassen · 3. <strong>einmal auf die Seite tippen</strong> („Ready to start“) · 4. ins Spielfeld klicken</p>
+      <p class="sub">Dieselben Spiele wie in deinem Projekt — <strong>sofort spielbar</strong> im Browser (kein VS Code, kein Warten).</p>
+      <p class="note">Dein <strong>Original-Python-Code</strong> liegt unverändert in <a href="https://github.com/Cynskzpt/pu-python-games/tree/main/sources" style="color:var(--cyan)">sources/</a> auf GitHub.</p>
     </header>
-
-    <div class="grid" id="grid"></div>
-
-    <p class="footer-note">
-      <a href="https://cynskzpt.github.io/pu-game-umfrage/" style="color:var(--cyan)">Feedback-Umfrage</a>
-      · Quellcode in <code>sources/</code> auf GitHub
-    </p>
+    <div class="grid">
+      <a class="game-card" href="play/snake/"><span class="emoji">🐍</span><span class="name">Snake</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/tetris/"><span class="emoji">🧱</span><span class="name">Tetris</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/pacman/"><span class="emoji">👻</span><span class="name">Pac-Man</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/flappy/"><span class="emoji">🐦</span><span class="name">Flappy Bird</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/hangman/"><span class="emoji">🪢</span><span class="name">Hangman</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/tictactoe/"><span class="emoji">❌</span><span class="name">Tic Tac Toe</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/rps/"><span class="emoji">✊</span><span class="name">Schere Stein Papier</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/reaction/"><span class="emoji">⚡</span><span class="name">Reaction Time</span><span class="tag">Python-Projekt</span></a>
+      <a class="game-card" href="play/zahl/"><span class="emoji">🔢</span><span class="name">Zahl raten</span><span class="tag">Python-Projekt</span></a>
+    </div>
+    <p class="footer-note"><a href="https://cynskzpt.github.io/pu-game-umfrage/" style="color:var(--cyan)">Feedback-Umfrage</a></p>
   </div>
-
-  <script>
-    const GAMES = [
-      { id: "snake", emoji: "🐍", name: "Snake", tag: "Python · Pygame" },
-      { id: "tetris", emoji: "🧱", name: "Tetris", tag: "Python · Pygame" },
-      { id: "pacman", emoji: "👻", name: "Pac-Man", tag: "Python · Turtle" },
-      { id: "flappy", emoji: "🐦", name: "Flappy Bird", tag: "Python · Pygame" },
-      { id: "hangman", emoji: "🪢", name: "Hangman", tag: "Python · Pygame" },
-      { id: "tictactoe", emoji: "❌", name: "Tic Tac Toe", tag: "Python · Pygame" },
-      { id: "rps", emoji: "✊", name: "Schere Stein Papier", tag: "Python · Pygame" },
-      { id: "reaction", emoji: "⚡", name: "Reaction Time", tag: "Python · Pygame" },
-      { id: "zahl", emoji: "🔢", name: "Zahl raten", tag: "Python · Konsole" },
-    ];
-
-    const grid = document.getElementById("grid");
-    GAMES.forEach((g) => {
-      const a = document.createElement("a");
-      a.className = "game-card";
-      a.href = `play/${g.id}/index.html`;
-      a.innerHTML = `<span class="emoji">${g.emoji}</span><span class="name">${g.name}</span><span class="tag">${g.tag}</span>`;
-      grid.appendChild(a);
-    });
-  </script>
 </body>
 </html>
