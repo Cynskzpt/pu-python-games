@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pac-Man</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../assets/style.css" />
@@ -11,38 +12,199 @@
   <div class="wrap">
     <div class="top-bar">
       <a class="back" href="../../index.html">← Arcade</a>
-      <a class="py-link" href="https://github.com/Cynskzpt/pu-python-games/blob/main/sources/pacman.py" target="_blank" rel="noopener">Python-Code</a>
+      <a class="py-link" href="https://github.com/Cynskzpt/pu-python-games/blob/main/sources/pacman_game.py" target="_blank" rel="noopener">Python-Code</a>
     </div>
     <h1>👻 Pac-Man</h1>
     <div class="game-frame">
-      <span class="score" id="score">0</span>
-      <canvas id="c" width="380" height="420"></canvas>
-      <p class="controls-hint">Pfeiltasten</p>
+      <span class="score" id="score">Score: 0</span>
+      <canvas id="c" width="800" height="360"></canvas>
+      <p class="controls-hint">Pfeiltasten · alle Punkte sammeln · Geister meiden</p>
+      <button class="btn" id="restart" hidden>Nochmal spielen</button>
     </div>
   </div>
   <script>
-    const c=document.getElementById("c"),x=c.getContext("2d");
-    const map=["11111111111111111","10101010101010101","11111111111111111","10000011100000001","10111110111110101","10100100010010101","11110111111011111","00010100010100000","11110111111011111","10100000000000101","10111111111110101","10000011100000001","11111111111111111"];
-    const R=13,C=17,cell=20;let pac={r:6,c:8,dir:{r:0,c:0},next:{r:0,c:0}},ghosts,dots,score;
-    function initDots(){dots=[];for(let r=0;r<R;r++)for(let c2=0;c2<C;c2++)if(map[r][c2]==="0")dots.push(r+","+c2);}
-    function reset(){initDots();score=0;pac={r:6,c:8,dir:{r:0,c:0},next:{r:0,c:0}};
-      ghosts=[{r:5,c:8,col:"#ff6b6b"},{r:6,c:7,col:"#00f5d4"},{r:6,c:9,col:"#ffb8f0"}];
-      document.getElementById("score").textContent=0;}
-    const wall=(r,c)=>r<0||c<0||r>=R||c>=C||map[r][c]==="1";
-    function move(ent,isPac){const d=isPac?(pac.next.r||pac.next.c?pac.next:pac.dir):ent.dir;
-      const nr=ent.r+d.r,nc=ent.c+d.c;if(!wall(nr,nc)){ent.r=nr;ent.c=nc;if(isPac)pac.dir=d;}
-      else if(!isPac)ent.dir=[{r:1,c:0},{r:-1,c:0},{r:0,c:1},{r:0,c:-1}][Math.floor(Math.random()*4)];}
-    function step(){move(pac,true);ghosts.forEach(g=>{if(Math.random()<0.08)g.dir=[{r:1,c:0},{r:-1,c:0},{r:0,c:1},{r:0,c:-1}][Math.floor(Math.random()*4)];move(g,false);
-      if(Math.abs(g.r-pac.r)+Math.abs(g.c-pac.c)<1.2)reset();});
-      const key=pac.r+","+pac.c,i=dots.indexOf(key);if(i>=0){dots.splice(i,1);score+=10;document.getElementById("score").textContent=score;if(!dots.length)reset();}
-      draw();}
-    function draw(){x.fillStyle="#0a0a12";x.fillRect(0,0,380,420);
-      for(let r=0;r<R;r++)for(let c2=0;c2<C;c2++)if(map[r][c2]==="1"){x.fillStyle="#1e3a8a";x.fillRect(c2*cell,r*cell+10,cell,cell);}
-      x.fillStyle="#ffe566";dots.forEach(d=>{const[r,c2]=d.split(",");x.beginPath();x.arc(c2*cell+cell/2,r*cell+10+cell/2,3,0,7);x.fill();});
-      x.fillStyle="#ffe566";x.beginPath();x.arc(pac.c*cell+cell/2,pac.r*cell+10+cell/2,9,0.2*Math.PI,1.8*Math.PI);x.lineTo(pac.c*cell+cell/2,pac.r*cell+10+cell/2);x.fill();
-      ghosts.forEach(g=>{x.fillStyle=g.col;x.beginPath();x.arc(g.c*cell+cell/2,g.r*cell+10+cell/2,8,0,Math.PI*2);x.fill();});}
-    document.addEventListener("keydown",e=>{const m={ArrowUp:{r:-1,c:0},ArrowDown:{r:1,c:0},ArrowLeft:{r:0,c:-1},ArrowRight:{r:0,c:1}};if(m[e.key])pac.next=m[e.key];});
-    reset();setInterval(step,140);
+    // Port von pacman game.py (Pygame)
+    const TILE = 40;
+    const W = 800, H = 360;
+    const maze = [
+      "####################",
+      "#........##........#",
+      "#.####.#.##.#.####.#",
+      "#..................#",
+      "#.####.######.####.#",
+      "#..................#",
+      "#.####.#.##.#.####.#",
+      "#........##........#",
+      "####################",
+    ];
+    const BLACK = "#000000", BLUE = "#0000ff", YELLOW = "#ffff00";
+    const RED = "#ff0000", PINK = "#ff69b4", WHITE = "#ffffff";
+
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    let player_x = TILE, player_y = TILE;
+    const speed = TILE;
+    let ghosts, dots, score, dead, keys = {};
+
+    function init() {
+      player_x = TILE;
+      player_y = TILE;
+      ghosts = [
+        { x: 10 * TILE, y: 3 * TILE, dx: TILE, dy: 0, color: RED },
+        { x: 8 * TILE, y: 5 * TILE, dx: -TILE, dy: 0, color: PINK },
+      ];
+      dots = [];
+      for (let y = 0; y < maze.length; y++) {
+        for (let x = 0; x < maze[y].length; x++) {
+          if (maze[y][x] === ".") {
+            dots.push({ x: x * TILE + 15, y: y * TILE + 15, w: 10, h: 10 });
+          }
+        }
+      }
+      score = 0;
+      dead = false;
+      document.getElementById("restart").hidden = true;
+      updateScore();
+    }
+
+    function updateScore() {
+      document.getElementById("score").textContent = "Score: " + score;
+    }
+
+    function wallAt(grid_x, grid_y) {
+      if (grid_y < 0 || grid_y >= maze.length || grid_x < 0 || grid_x >= maze[0].length) return true;
+      return maze[grid_y][grid_x] === "#";
+    }
+
+    function movePlayer(dx, dy) {
+      const new_x = player_x + dx;
+      const new_y = player_y + dy;
+      const grid_x = Math.floor(new_x / TILE);
+      const grid_y = Math.floor(new_y / TILE);
+      if (!wallAt(grid_x, grid_y)) {
+        player_x = new_x;
+        player_y = new_y;
+      }
+    }
+
+    function moveGhosts() {
+      for (const g of ghosts) {
+        const new_x = g.x + g.dx;
+        const new_y = g.y + g.dy;
+        const grid_x = Math.floor(new_x / TILE);
+        const grid_y = Math.floor(new_y / TILE);
+        if (wallAt(grid_x, grid_y)) {
+          g.dx *= -1;
+          g.dy *= -1;
+        } else {
+          g.x = new_x;
+          g.y = new_y;
+        }
+      }
+    }
+
+    function drawMaze() {
+      for (let y = 0; y < maze.length; y++) {
+        for (let x = 0; x < maze[y].length; x++) {
+          if (maze[y][x] === "#") {
+            ctx.fillStyle = BLUE;
+            ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+          }
+        }
+      }
+    }
+
+    function drawDots() {
+      ctx.fillStyle = WHITE;
+      for (const d of dots) ctx.fillRect(d.x, d.y, d.w, d.h);
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = YELLOW;
+      ctx.beginPath();
+      ctx.arc(player_x + TILE / 2, player_y + TILE / 2, TILE / 2 - 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawGhosts() {
+      for (const g of ghosts) {
+        ctx.fillStyle = g.color;
+        ctx.fillRect(g.x, g.y, TILE, TILE);
+      }
+    }
+
+    function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    function step() {
+      if (dead) return;
+
+      if (keys.ArrowLeft) movePlayer(-speed, 0);
+      if (keys.ArrowRight) movePlayer(speed, 0);
+      if (keys.ArrowUp) movePlayer(0, -speed);
+      if (keys.ArrowDown) movePlayer(0, speed);
+
+      moveGhosts();
+
+      const px = player_x, py = player_y, pw = TILE, ph = TILE;
+      for (let i = dots.length - 1; i >= 0; i--) {
+        const d = dots[i];
+        if (rectsOverlap(px, py, pw, ph, d.x, d.y, d.w, d.h)) {
+          dots.splice(i, 1);
+          score += 1;
+          updateScore();
+        }
+      }
+
+      for (const g of ghosts) {
+        if (rectsOverlap(px, py, pw, ph, g.x, g.y, TILE, TILE)) {
+          dead = true;
+          document.getElementById("restart").hidden = false;
+          break;
+        }
+      }
+
+      if (!dead && dots.length === 0) {
+        dead = true;
+        document.getElementById("score").textContent = "Gewonnen! Score: " + score;
+        document.getElementById("restart").hidden = false;
+      }
+
+      ctx.fillStyle = BLACK;
+      ctx.fillRect(0, 0, W, H);
+      drawMaze();
+      drawDots();
+      drawPlayer();
+      drawGhosts();
+      if (dead) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = WHITE;
+        ctx.font = "bold 28px Outfit, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          dots.length === 0 ? "Du hast gewonnen!" : "GAME OVER",
+          W / 2,
+          H / 2
+        );
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key.startsWith("Arrow")) {
+        keys[e.key] = true;
+        e.preventDefault();
+      }
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.key.startsWith("Arrow")) keys[e.key] = false;
+    });
+
+    document.getElementById("restart").onclick = init;
+
+    init();
+    setInterval(step, 1000 / 8); // clock.tick(8) wie in Python
   </script>
 </body>
 </html>

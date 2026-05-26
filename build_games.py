@@ -24,7 +24,7 @@ GAMES = [
     ("tictactoe", "tic tac toe.py"),
     ("rps", "rock paper scissors2.py"),
     ("reaction", "reaction time test.py"),
-    ("pacman", "pacman.py"),
+    ("pacman", "pacman game.py"),
     ("zahl", "Zahl_raten.py"),
 ]
 
@@ -66,12 +66,6 @@ def build_one(game_id: str, source_name: str) -> bool:
 
     code = src_file.read_text(encoding="utf-8")
     (work / "main.py").write_text(code, encoding="utf-8")
-
-    if game_id == "pacman":
-        import freegames
-
-        fg = Path(freegames.__file__).parent
-        shutil.copytree(fg, work / "freegames")
 
     print(f"  BUILD {game_id} ...")
     env = {**dict(__import__("os").environ), "PYTHONUTF8": "1"}
