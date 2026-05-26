@@ -39,9 +39,14 @@ BACK_BAR = """
 
 def patch_index(html_path: Path) -> None:
     text = html_path.read_text(encoding="utf-8")
+    # GitHub Pages: nur .apk liegt vor, nicht .tar.gz (sonst endloses Loading)
+    text = text.replace(
+        "if platform.window.location.host.find('.itch.zone')>0:",
+        "if True:  # .apk für Web-Hosting",
+    )
     if "pu-bar" not in text:
         text = text.replace("<body", BACK_BAR + "<body", 1)
-        html_path.write_text(text, encoding="utf-8")
+    html_path.write_text(text, encoding="utf-8")
 
 
 def build_one(game_id: str, source_name: str) -> bool:
