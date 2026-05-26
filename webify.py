@@ -187,8 +187,8 @@ def _fix_tetris_draw_lost(code: str) -> str:
 
 
 def webify(code: str, game_id: str) -> str:
-    if game_id in ("zahl", "hangman", "rps"):
-        path = WEB_VERSIONS / ("zahl_pygame.py" if game_id == "zahl" else f"{game_id}.py")
+    if game_id in ("dice", "hangman", "rps"):
+        path = WEB_VERSIONS / f"{game_id}.py"
         return path.read_text(encoding="utf-8")
 
     code = _add_asyncio(code)

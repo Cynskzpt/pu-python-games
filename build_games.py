@@ -27,7 +27,7 @@ GAMES = [
     ("rps", "rock paper scissors2.py"),
     ("reaction", "reaction time test.py"),
     ("pacman", "pacman game.py"),
-    ("zahl", "Zahl_raten.py"),
+    ("dice", "Lucky Dice.py"),
 ]
 
 BACK_BAR = """
