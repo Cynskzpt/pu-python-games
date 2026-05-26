@@ -1,6 +1,6 @@
 """
-Baut Python-Spiele mit pygbag (--archive) für GitHub Pages.
-Originale im PU-Projekt bleiben unverändert — hier werden Kopien gebaut.
+Baut die Original-Python-Spiele mit pygbag für den Browser.
+PU-Projekt-Dateien bleiben unverändert — nur Kopien werden angepasst.
 """
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+
+from webify import webify
 
 ROOT = Path(__file__).resolve().parent
 PU = ROOT.parent
@@ -29,9 +31,9 @@ GAMES = [
 ]
 
 BACK_BAR = """
-<div id="pu-bar" style="position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(10,10,15,0.92);border-bottom:1px solid rgba(255,255,255,0.12);font-family:system-ui,sans-serif;">
+<div id="pu-bar" style="position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(10,10,15,0.95);border-bottom:1px solid rgba(255,255,255,0.12);font-family:Outfit,system-ui,sans-serif;">
   <a href="../../index.html" style="color:#00f5d4;font-weight:700;text-decoration:none;">← Arcade</a>
-  <span style="color:#9b9bb8;font-size:14px;">Python · Klick ins Spiel · ggf. kurz laden</span>
+  <span style="color:#9b9bb8;font-size:13px;">Echtes Python · 1. Mal ~30–60 Sek. laden · dann auf Seite tippen</span>
 </div>
 <style>body { padding-top: 48px !important; }</style>
 """
@@ -39,10 +41,9 @@ BACK_BAR = """
 
 def patch_index(html_path: Path) -> None:
     text = html_path.read_text(encoding="utf-8")
-    # GitHub Pages: nur .apk liegt vor, nicht .tar.gz (sonst endloses Loading)
     text = text.replace(
         "if platform.window.location.host.find('.itch.zone')>0:",
-        "if True:  # .apk für Web-Hosting",
+        "if True:  # .apk für GitHub Pages",
     )
     if "pu-bar" not in text:
         text = text.replace("<body", BACK_BAR + "<body", 1)
@@ -52,7 +53,7 @@ def patch_index(html_path: Path) -> None:
 def build_one(game_id: str, source_name: str) -> bool:
     src_file = PU / source_name
     if not src_file.exists():
-        print(f"  SKIP {game_id}: {source_name} nicht gefunden")
+        print(f"  SKIP {game_id}: {source_name} fehlt")
         return False
 
     SOURCES.mkdir(exist_ok=True)
@@ -64,8 +65,9 @@ def build_one(game_id: str, source_name: str) -> bool:
         shutil.rmtree(work)
     work.mkdir(parents=True)
 
-    code = src_file.read_text(encoding="utf-8")
-    (work / "main.py").write_text(code, encoding="utf-8")
+    original = src_file.read_text(encoding="utf-8")
+    web_code = webify(original, game_id)
+    (work / "main.py").write_text(web_code, encoding="utf-8")
 
     print(f"  BUILD {game_id} ...")
     env = {**dict(__import__("os").environ), "PYTHONUTF8": "1"}
@@ -77,10 +79,10 @@ def build_one(game_id: str, source_name: str) -> bool:
         encoding="utf-8",
         errors="replace",
         env=env,
-        timeout=180,
+        timeout=300,
     )
     if r.returncode != 0:
-        print((r.stderr or r.stdout)[-1500:])
+        print((r.stderr or r.stdout)[-2000:])
         return False
 
     zpath = work / "build" / "web.zip"
@@ -95,6 +97,11 @@ def build_one(game_id: str, source_name: str) -> bool:
 
     with zipfile.ZipFile(zpath, "r") as zf:
         zf.extractall(out)
+
+    # APK-Größe prüfen
+    apks = list(out.glob("*.apk"))
+    if apks and apks[0].stat().st_size < 500:
+        print(f"  WARN {game_id}: APK sehr klein ({apks[0].stat().st_size} B)")
 
     patch_index(out / "index.html")
     print(f"  OK {game_id}")
