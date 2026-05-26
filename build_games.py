@@ -110,8 +110,15 @@ def build_one(game_id: str, source_name: str) -> bool:
 
 def main() -> None:
     PLAY.mkdir(exist_ok=True)
-    ok = sum(1 for gid, fn in GAMES if build_one(gid, fn))
-    print(f"\nFertig: {ok}/{len(GAMES)} -> {PLAY}")
+    games = GAMES
+    if len(sys.argv) > 1:
+        only = {a.lower() for a in sys.argv[1:]}
+        games = [g for g in GAMES if g[0] in only]
+        if not games:
+            print("Unbekannte IDs. Beispiel: python build_games.py tetris flappy")
+            sys.exit(1)
+    ok = sum(1 for gid, fn in games if build_one(gid, fn))
+    print(f"\nFertig: {ok}/{len(games)} -> {PLAY}")
 
 
 if __name__ == "__main__":

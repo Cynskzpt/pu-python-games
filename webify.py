@@ -5,6 +5,19 @@ Die Dateien im PU-Projekt-Ordner bleiben unverändert.
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+WEB_VERSIONS = Path(__file__).resolve().parent / "web_versions"
+
+# Variablen, die in async main() zugewiesen werden (sonst lokale Kopien → Spiel hängt)
+GAME_GLOBALS: dict[str, str] = {
+    "flappy": "running, flap_timer, game_active, bird_movement, bird_y, pipes, score, best_score, pipe_spawn_cd",
+    "hangman": "running, word, guessed, wrong_guesses, game_over, win, letters",
+    "reaction": "running, state, round_number, wait_time, game_start, start_time, reaction_times",
+    "tictactoe": "running, player, board, game_over, vs_bot",
+    "rps": "running",
+    "pacman": "running, player_x, player_y, ghosts, dots, score",
+}
 
 
 def _add_asyncio(code: str) -> str:
@@ -21,24 +34,49 @@ def _add_asyncio(code: str) -> str:
 
 
 def _sleep_after_ticks(code: str) -> str:
+    """await nur im Körper von async def (nicht in normalen def-Hilfsfunktionen)."""
+
     def repl(m: re.Match) -> str:
         ind, stmt = m.group(1), m.group(2)
         return f"{ind}{stmt}\n{ind}await asyncio.sleep(0)"
 
-    return re.sub(r"^(\s*)(clock\.tick\([^)]*\))", repl, code, flags=re.M)
+    lines = code.splitlines(keepends=True)
+    out: list[str] = []
+    in_async = False
+    for line in lines:
+        if re.match(r"^async def ", line):
+            in_async = True
+        elif in_async and re.match(r"^def ", line):
+            in_async = False
+        elif in_async and line.strip() and not line[0].isspace():
+            if not line.startswith("asyncio.run"):
+                in_async = False
+        out.append(line)
+        if in_async and re.match(r"^(\s*)clock\.tick\([^)]*\)\s*$", line):
+            ind = re.match(r"^(\s*)", line).group(1)
+            out.append(f"{ind}await asyncio.sleep(0)\n")
+    return "".join(out)
 
 
 def _sleep_after_display(code: str) -> str:
-    def repl(m: re.Match) -> str:
-        ind, stmt = m.group(1), m.group(2)
-        return f"{ind}{stmt}\n{ind}await asyncio.sleep(0)"
+    """pygame.display.update nur in async def — vermeidet SyntaxError in draw_lost_message etc."""
 
-    return re.sub(
-        r"^(\s*)(pygame\.display\.(?:update|flip)\(\))",
-        repl,
-        code,
-        flags=re.M,
-    )
+    lines = code.splitlines(keepends=True)
+    out: list[str] = []
+    in_async = False
+    for line in lines:
+        if re.match(r"^async def ", line):
+            in_async = True
+        elif in_async and re.match(r"^def ", line):
+            in_async = False
+        elif in_async and line.strip() and not line[0].isspace():
+            if not line.startswith("asyncio.run"):
+                in_async = False
+        out.append(line)
+        if in_async and re.search(r"pygame\.display\.(?:update|flip)\(\)", line):
+            ind = re.match(r"^(\s*)", line).group(1)
+            out.append(f"{ind}await asyncio.sleep(0)\n")
+    return "".join(out)
 
 
 def _strip_tail(code: str) -> str:
@@ -54,7 +92,12 @@ def _indent_block(text: str, spaces: int = 4) -> str:
     return "".join(pad + line if line.strip() else line for line in text.splitlines(keepends=True))
 
 
-def _wrap_module_while(code: str, footer_globals: str = "") -> str:
+def _globals_footer(game_id: str) -> str:
+    names = GAME_GLOBALS.get(game_id, "running")
+    return f"    global {names}\n"
+
+
+def _wrap_module_while(code: str, game_id: str) -> str:
     m = re.search(r"^while\s+.+:\s*$", code, flags=re.M)
     if not m:
         return code
@@ -72,16 +115,72 @@ def _wrap_module_while(code: str, footer_globals: str = "") -> str:
         "if event.type == pygame.QUIT:\n            running = False",
         tail,
     )
-    return (
-        head
-        + "async def main():\n"
-        + footer_globals
-        + _indent_block(tail, 4)
-        + "\nasyncio.run(main())\n"
+    extra = _globals_footer(game_id)
+    if game_id in ("hangman", "reaction", "tictactoe", "rps"):
+        extra += "    running = True\n"
+    return head + "async def main():\n" + extra + _indent_block(tail, 4) + "\nasyncio.run(main())\n"
+
+
+def _fix_flappy(code: str) -> str:
+    code = re.sub(
+        r"SPAWNPIPE = pygame\.USEREVENT\s*\npygame\.time\.set_timer\(SPAWNPIPE, \d+\)\s*\n",
+        "",
+        code,
     )
+    if "pipe_spawn_cd = 0" not in code:
+        code = code.replace(
+            "running = True\nflap_timer = 0",
+            "running = True\nflap_timer = 0\npipe_spawn_cd = 0",
+        )
+    code = code.replace(
+        "        flap_timer += 1\n",
+        "        flap_timer += 1\n"
+        "        pipe_spawn_cd += 1\n"
+        "        if pipe_spawn_cd >= 84 and game_active:\n"
+        "            pipe_spawn_cd = 0\n"
+        "            pipes.extend(create_pipe())\n",
+    )
+    code = re.sub(
+        r"\s*if event\.type == SPAWNPIPE and game_active:\s*\n\s*pipes\.extend\(create_pipe\(\)\)\s*\n",
+        "\n",
+        code,
+    )
+    return code
+
+
+def _fix_tetris_draw_lost(code: str) -> str:
+    """draw_lost_message: kein await in sync def; Verzögerung im Hauptloop."""
+    code = re.sub(
+        r"def draw_lost_message\(\):.*?pygame\.time\.delay\(\d+\)\s*\n",
+        "def draw_lost_message():\n"
+        "    label = font.render('You lost!', True, white)\n"
+        "    screen.blit(label, (width // 2 - label.get_width() // 2, height // 2 - label.get_height() // 2))\n"
+        "    pygame.display.update()\n\n",
+        code,
+        flags=re.DOTALL,
+    )
+    # await in draw_lost_message entfernen (falls von alter webify-Version)
+    code = re.sub(
+        r"(def draw_lost_message\(\):.*?)\n\s*await asyncio\.sleep\([^)]+\)\s*\n",
+        r"\1\n",
+        code,
+        flags=re.DOTALL,
+    )
+    if "await asyncio.sleep(1.5)" not in code:
+        code = code.replace(
+            "            draw_lost_message()  # Muestra el mensaje de \"Perdiste\"\n"
+            "            run = False  # Termina el juego",
+            "            draw_lost_message()\n"
+            "            await asyncio.sleep(1.5)\n"
+            "            run = False\n",
+        )
+    return code
 
 
 def webify(code: str, game_id: str) -> str:
+    if game_id == "zahl":
+        return (WEB_VERSIONS / "zahl_pygame.py").read_text(encoding="utf-8")
+
     code = _add_asyncio(code)
     code = _strip_tail(code)
 
@@ -96,60 +195,17 @@ def webify(code: str, game_id: str) -> str:
         code = code.replace("def main():", "async def main():")
         code = _sleep_after_ticks(code)
         code = _sleep_after_display(code)
+        code = _fix_tetris_draw_lost(code)
         if "asyncio.run(main())" not in code:
             code += "\nasyncio.run(main())\n"
         return code
 
-    if game_id == "zahl":
-        return _webify_zahl(code)
-
     if game_id in ("flappy", "hangman", "pacman", "reaction", "tictactoe", "rps"):
         if game_id in ("tictactoe", "rps"):
             code = code.replace("while True:", "while running:")
-        extra = ""
+        code = _wrap_module_while(code, game_id)
         if game_id == "flappy":
-            extra = "    global running, flap_timer\n"
-        elif game_id in ("hangman", "reaction", "tictactoe", "rps"):
-            extra = "    global running\n    running = True\n"
-        elif game_id == "pacman":
-            extra = "    global running, player_x, player_y, ghosts, dots, score\n"
-        return _wrap_module_while(code, extra)
+            code = _fix_flappy(code)
+        return code
 
-    return _wrap_module_while(code)
-
-
-def _webify_zahl(code: str) -> str:
-    return '''import asyncio
-import random
-
-async def main():
-    geheime_zahl = random.randint(1, 100)
-    moegliche_versuche = 3
-
-    while moegliche_versuche > 0:
-        print('Errate die Zahl zwischen 1 und 100')
-        print('Du hast', moegliche_versuche, 'Versuche')
-        eingabe = await input('Deine Eingabe:')
-
-        try:
-            geratene_zahl = int(eingabe)
-            if geratene_zahl > 100:
-                print('Die Zahl liegt doch unter 100!')
-                continue
-            if geratene_zahl > geheime_zahl:
-                print("Zu hoch! Versuch's nochmal!")
-                moegliche_versuche -= 1
-            elif geratene_zahl < geheime_zahl:
-                print("Zu niedrig! Versuch's nochmal!")
-                moegliche_versuche -= 1
-            else:
-                print('Richtig geraten!')
-                return
-        except ValueError:
-            print('Ganz vergessen.. nur ganze Zahlen bitte!')
-            moegliche_versuche -= 1
-
-    print('Leider nicht erraten. Die Zahl war', geheime_zahl)
-
-asyncio.run(main())
-'''
+    return _wrap_module_while(code, game_id)
